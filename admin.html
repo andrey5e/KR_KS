@@ -1,1 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Администратор</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0B192C; color: #E2E8F0; padding: 20px; }
+        .container { max-width: 1300px; margin: 0 auto; background: #1A2C42; border-radius: 12px; padding: 25px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #3A506B; padding-bottom: 15px; }
+        h1, h2, h3 { color: #FFC107; }
+        .tabs { display: flex; gap: 12px; margin: 25px 0; justify-content: center; }
+        .tab { padding: 12px 28px; background: #2A3E59; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .tab.active { background: #FFC107; color: #0B192C; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        input, select, textarea { width: 100%; padding: 12px; margin: 8px 0; background: #0B192C; color: white; border: 1px solid #3A506B; border-radius: 6px; }
+        button { background: #FFC107; color: #0B192C; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px 0; transition: 0.2s; }
+        button:hover { background: #E0A800; }
+        .user-card, .order-card { background: #0B192C; border: 1px solid #3A506B; padding: 15px; margin: 10px 0; border-radius: 8px; }
+        .danger-btn { background: #DC3545; color: white; }
+        .edit-form { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #3A506B; }
+        .service-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 15px 0; max-height: 300px; overflow-y: auto; }
+        .service-chip { background: #2A3E59; padding: 10px 15px; border-radius: 20px; cursor: pointer; font-size: 14px; transition: 0.2s; }
+        .service-chip:hover { background: #3A506B; }
+        .service-chip.selected { background: #FFC107; color: #0B192C; }
+        .selected-stage { background: #112035; padding: 10px; margin: 8px 0; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #FFC107; }
+        .remove-stage { background: #DC3545; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .stage-detail { margin-left: 20px; margin-top: 8px; padding: 10px; background: #112035; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .stage-name { font-weight: bold; min-width: 250px; }
+        .stage-status { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .status-pending { background: #6c757d; color: white; }
+        .status-in_progress { background: #FFC107; color: #0B192C; }
+        .status-completed { background: #28a745; color: white; }
+        .info-text { color: #FFC107; font-size: 14px; margin: 10px 0; }
+        .master-badge { background: #2A3E59; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Панель администратора</h1>
+        <button onclick="logout()" class="danger-btn">Выход</button>
+    </div>
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('orders')">Заказы</div>
+        <div class="tab" onclick="showTab('users')">Пользователи</div>
+        <div class="tab" onclick="showTab('register')">Регистрация</div>
+    </div>
 
+    <div id="ordersTab" class="tab-content active">
+        <button onclick="showCreateOrderForm()">+ Создать заказ</button>
+        <div id="createOrderForm" style="display:none; margin:20px 0; padding:20px; background:#112035; border-radius:10px;">
+            <h3>Новый заказ</h3>
+            <input type="text" id="orderClient" placeholder="Логин клиента">
+            <input type="text" id="orderCar" placeholder="Марка и модель автомобиля">
+            <input type="text" id="orderPlate" placeholder="Гос. номер">
+            <h4>Выберите услуги (этапы работ)</h4>
+            <div id="selectedStagesContainer">
+                <div id="selectedStagesList"></div>
+            </div>
+            <div class="service-list" id="serviceList"></div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="createOrder()">Создать заказ</button>
+                <button onclick="document.getElementById('createOrderForm').style.display='none'" style="background:#6c757d;">❌ Отмена</button>
+            </div>
+        </div>
+        <div id="ordersList">Загрузка...</div>
+    </div>
+
+    <div id="usersTab" class="tab-content">
+        <div style="display:flex; gap:20px;">
+            <div style="flex:1;"><h3>Мастера</h3><div id="mastersList"></div></div>
+            <div style="flex:1;"><h3>Клиенты</h3><div id="clientsList"></div></div>
+        </div>
+    </div>
+
+    <div id="registerTab" class="tab-content">
+        <div style="max-width:500px; margin:0 auto;">
+            <h2>Регистрация нового пользователя</h2>
+            <div id="regError" style="color:#ff4444;"></div>
+            <input type="text" id="regUser" placeholder="Логин">
+            <input type="text" id="regFullName" placeholder="Имя">
+            <input type="password" id="regPass" placeholder="Пароль">
+            <input type="text" id="regPhone" placeholder="Телефон +7 (XXX) XXX-XX-XX">
+            <select id="regRole">
+                <option value="client">Клиент</option>
+                <option value="master">Мастер</option>
+            </select>
+            <input type="text" id="regSpecialization" placeholder="Специализация (для мастера)">
+            <button onclick="registerUser()">Зарегистрировать</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const token = localStorage.getItem('token');
+    if (!token || localStorage.getItem('role') !== 'admin') window.location.href = '/frontend/login.html';
+
+    let services = [];
+    let selectedServices = new Set();
+
+    async function apiReq(url, method, body = null) {
+        const options = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body) options.body = JSON.stringify(body);
+        const res = await fetch(url, options);
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+    }
+
+    async function loadServices() {
+        services = await apiReq('/api/services', 'GET');
+        renderServicesList();
+    }
+
+    function renderServicesList() {
+        const container = document.getElementById('serviceList');
+        container.innerHTML = services.map(s => `
+            <div class="service-chip ${selectedServices.has(s.name) ? 'selected' : ''}" 
+                 onclick="toggleService('${s.name.replace(/'/g, "\\'")}')">
+                ${s.name}
+                <small style="display:block; font-size:10px;">→ мастер: ${s.assigned_master_id}</small>
+            </div>
+        `).join('');
+    }
+
+    function toggleService(serviceName) {
+        if (selectedServices.has(serviceName)) {
+            selectedServices.delete(serviceName);
+        } else {
+            selectedServices.add(serviceName);
+        }
+        renderServicesList();
+        renderSelectedStages();
+    }
+
+    function renderSelectedStages() {
+        const container = document.getElementById('selectedStagesList');
+        const selectedArray = Array.from(selectedServices);
+        if (selectedArray.length === 0) {
+            container.innerHTML = '<div class="info-text"></div>';
+            return;
+        }
+        container.innerHTML = selectedArray.map((name, idx) => {
+            const service = services.find(s => s.name === name);
+            return `
+                <div class="selected-stage">
+                    <span>${idx + 1}. ${name}</span>
+                    <div>
+                        <span class="master-badge">Мастер: ${service?.assigned_master_id || 'автоматически'}</span>
+                        <span class="remove-stage" onclick="toggleService('${name.replace(/'/g, "\\'")}')">✖ Убрать</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function showCreateOrderForm() {
+        selectedServices.clear();
+        renderServicesList();
+        renderSelectedStages();
+        document.getElementById('createOrderForm').style.display = 'block';
+    }
+
+    async function createOrder() {
+        const client = document.getElementById('orderClient').value.trim();
+        const car = document.getElementById('orderCar').value.trim();
+        const plate = document.getElementById('orderPlate').value.trim();
+        if (!client || !car || !plate) {
+            alert('Заполните поля: клиент, марка, гос. номер');
+            return;
+        }
+        if (selectedServices.size === 0) {
+            alert('Добавьте хотя бы одну услугу');
+            return;
+        }
+        const stages = Array.from(selectedServices).map(name => ({ name, description: "" }));
+        try {
+            const result = await apiReq('/api/orders', 'POST', {
+                client_id: client,
+                car_model: car,
+                car_plate: plate,
+                stages: stages,
+                token
+            });
+            alert(`Заказ создан! ID: ${result.order_id}\nМастера назначены автоматически.`);
+            document.getElementById('createOrderForm').style.display = 'none';
+            selectedServices.clear();
+            renderSelectedStages();
+            loadOrders();
+        } catch(e) {
+            alert('Ошибка: ' + e.message);
+        }
+    }
+
+    function showTab(tab) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(tab + 'Tab').classList.add('active');
+        event.currentTarget.classList.add('active');
+        if (tab === 'users') loadUsers();
+        if (tab === 'orders') loadOrders();
+    }
+
+    async function loadUsers() {
+        try {
+            const masters = await apiReq(`/api/users?role=master&token=${token}`, 'GET');
+            const clients = await apiReq(`/api/users?role=client&token=${token}`, 'GET');
+            document.getElementById('mastersList').innerHTML = masters.map(u => renderUser(u)).join('');
+            document.getElementById('clientsList').innerHTML = clients.map(u => renderUser(u)).join('');
+        } catch(e) { alert("Ошибка загрузки: " + e.message); }
+    }
+
+    function renderUser(u) {
+        return `
+            <div class="user-card">
+                <b>${u.full_name || u.username}</b> (${u.username})<br>
+                <small>${u.phone || 'Нет телефона'}</small><br>
+                <button onclick="toggleEdit('${u.id}')">Редактировать</button>
+                <button onclick="deleteUser('${u.id}')" class="danger-btn">🗑 Удалить</button>
+                <div id="edit-${u.id}" class="edit-form">
+                    <input type="text" id="name-${u.id}" value="${u.full_name}" placeholder="Имя">
+                    <input type="text" id="username-${u.id}" value="${u.username}" placeholder="Логин">
+                    <input type="text" id="phone-${u.id}" value="${u.phone}" placeholder="Телефон">
+                    <input type="text" id="spec-${u.id}" value="${u.specialization || ''}" placeholder="Специализация">
+                    <button onclick="saveUser('${u.id}')">Сохранить</button>
+                </div>
+            </div>`;
+    }
+
+    function toggleEdit(id) {
+        const form = document.getElementById(`edit-${id}`);
+        form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    }
+
+    async function saveUser(id) {
+        const full_name = document.getElementById(`name-${id}`).value;
+        const username = document.getElementById(`username-${id}`).value;
+        const phone = document.getElementById(`phone-${id}`).value;
+        const specialization = document.getElementById(`spec-${id}`).value;
+        await apiReq(`/api/users/${id}?token=${token}`, 'PUT', { full_name, username, phone, specialization });
+        loadUsers();
+    }
+
+    async function deleteUser(id) {
+        if (!confirm("Удалить пользователя?")) return;
+        await apiReq(`/api/users/${id}?token=${token}`, 'DELETE');
+        loadUsers();
+    }
+
+    async function registerUser() {
+        const data = {
+            username: document.getElementById('regUser').value,
+            full_name: document.getElementById('regFullName').value,
+            password: document.getElementById('regPass').value,
+            phone: document.getElementById('regPhone').value,
+            role: document.getElementById('regRole').value,
+            specialization: document.getElementById('regSpecialization').value
+        };
+        try {
+            await apiReq('/auth/register', 'POST', data);
+            alert("Пользователь создан!");
+            showTab('users');
+        } catch(e) { document.getElementById('regError').innerText = e.message; }
+    }
+
+    function getStatusBadge(status) {
+        const statusMap = { 'pending': 'Ожидает', 'in_progress': 'В работе', 'completed': '✅ Завершён' };
+        const classMap = { 'pending': 'status-pending', 'in_progress': 'status-in_progress', 'completed': 'status-completed' };
+        return `<span class="stage-status ${classMap[status]}">${statusMap[status] || status}</span>`;
+    }
+
+    async function loadOrders() {
+        const orders = await apiReq(`/api/orders?token=${token}`, 'GET');
+        const container = document.getElementById('ordersList');
+        if (orders.length === 0) { container.innerHTML = '<p>Нет заказов</p>'; return; }
+        container.innerHTML = orders.map(o => `
+            <div class="order-card" id="order-card-${o.id}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h4>Заказ — ${o.car_model} (${o.car_plate})</h4>
+                        <p>Клиент: ${o.client_id} | Статус: <b>${o.status}</b> | Создан: ${new Date(o.created_at).toLocaleString()}</p>
+                    </div>
+                </div>
+                <div id="stages-${o.id}">Загрузка этапов...</div>
+            </div>
+        `).join('');
+        
+        for (let o of orders) {
+            const stages = await apiReq(`/api/orders/${o.id}/stages?token=${token}`, 'GET');
+            const stagesHtml = stages.map(s => `
+                <div class="stage-detail">
+                    <div class="stage-name">📌 ${s.name}</div>
+                    <div>${getStatusBadge(s.status)}</div>
+                    <div>Мастер: <b>${s.assigned_master_name}</b></div>
+                </div>
+            `).join('');
+            document.getElementById(`stages-${o.id}`).innerHTML = stagesHtml;
+        }
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/frontend/login.html'; }
+
+    window.onload = () => { loadServices(); loadOrders(); };
+</script>
+</body>
+</html>
