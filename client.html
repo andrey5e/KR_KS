@@ -1,1 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Клиент - Мои заказы</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0B192C; color: #E2E8F0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: #1A2C42; border-radius: 12px; padding: 25px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #3A506B; padding-bottom: 15px; margin-bottom: 20px; }
+        h1, h2, h3 { color: #FFC107; }
+        .order-card { background: #0B192C; border: 1px solid #3A506B; border-radius: 12px; padding: 20px; margin-bottom: 30px; }
+        .chat-box { background: #112035; height: 300px; overflow-y: auto; padding: 15px; border-radius: 8px; margin: 15px 0; display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 10px; border-radius: 10px; max-width: 80%; }
+        .msg.me { background: #FFC107; color: #000; align-self: flex-end; }
+        .msg.other { background: #2A3E59; color: #fff; align-self: flex-start; }
+        .msg small { font-size: 11px; opacity: 0.8; display: block; }
+        .input-area { display: flex; gap: 10px; margin-top: 10px; }
+        .input-area input { flex: 1; padding: 12px; border-radius: 6px; border: none; background: #0B192C; color: white; }
+        button { padding: 12px 20px; background: #FFC107; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .danger-btn { background: #DC3545; color: white; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Мои автомобили</h1>
+        <button onclick="logout()" class="danger-btn">Выход</button>
+    </div>
+    <div id="ordersList">Загрузка...</div>
+</div>
 
+<script>
+    const token = localStorage.getItem('token');
+    const userId = localStorage.getItem('user_id');
+    if (!token || localStorage.getItem('role') !== 'client') window.location.href = '/frontend/login.html';
+
+    let ws = null;
+
+    function connectWebSocket() {
+        if (ws && ws.readyState === WebSocket.OPEN) return;
+        ws = new WebSocket(`ws://${window.location.host}/ws?token=${token}`);
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'chat') {
+                const chatDiv = document.getElementById(`chat-${msg.data.order_id}`);
+                if (chatDiv) {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `msg ${msg.data.sender_id === userId ? 'me' : 'other'}`;
+                    messageDiv.innerHTML = `<small>${msg.data.sender_name} (${msg.data.timestamp.slice(0,19)})</small><br>${msg.data.text}`;
+                    chatDiv.appendChild(messageDiv);
+                    chatDiv.scrollTop = chatDiv.scrollHeight;
+                }
+            } else if (msg.type === 'status_update') {
+                const statusDiv = document.getElementById(`status-${msg.data.order_id}`);
+                if (statusDiv) statusDiv.innerHTML = `<b>Статус:</b> ${msg.data.text}`;
+                else alert(`Обновление статуса заказа ${msg.data.order_id}: ${msg.data.text}`);
+            }
+        };
+        ws.onclose = () => { setTimeout(connectWebSocket, 3000); };
+    }
+
+    async function loadOrders() {
+        try {
+            const resp = await fetch(`/api/orders?token=${token}`);
+            const orders = await resp.json();
+            const container = document.getElementById('ordersList');
+            if (orders.length === 0) { container.innerHTML = '<p>У вас нет заказов</p>'; return; }
+            container.innerHTML = orders.map(o => `
+                <div class="order-card">
+                    <h3>${o.car_model} — ${o.car_plate}</h3>
+                    <p id="status-${o.id}"><b>Статус:</b> ${o.status}</p>
+                    <div class="chat-box" id="chat-${o.id}"></div>
+                    <div class="input-area">
+                        <input type="text" id="input-${o.id}" placeholder="Сообщение мастеру...">
+                        <button onclick="sendMessage('${o.id}')">Отправить</button>
+                    </div>
+                </div>
+            `).join('');
+            for (let o of orders) {
+                await loadMessages(o.id);
+            }
+            connectWebSocket();
+        } catch(e) { console.error(e); document.getElementById('ordersList').innerHTML = '<p>Ошибка загрузки заказов</p>'; }
+    }
+
+    async function loadMessages(orderId) {
+        try {
+            const resp = await fetch(`/api/orders/${orderId}/messages?token=${token}`);
+            const msgs = await resp.json();
+            const chatDiv = document.getElementById(`chat-${orderId}`);
+            chatDiv.innerHTML = msgs.map(m => `
+                <div class="msg ${m.sender_id === userId ? 'me' : 'other'}">
+                    <small>${m.sender_name} (${m.timestamp.slice(0,19)})</small><br>${m.text}
+                </div>
+            `).join('');
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        } catch(e) { console.error('Ошибка загрузки сообщений', e); }
+    }
+
+    function sendMessage(orderId) {
+        const input = document.getElementById(`input-${orderId}`);
+        const text = input.value.trim();
+        if (!text) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            alert('Соединение не установлено. Попробуйте позже.');
+            return;
+        }
+        ws.send(JSON.stringify({ type: 'chat', order_id: orderId, text: text }));
+        input.value = '';
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/frontend/login.html'; }
+
+    window.onload = loadOrders;
+</script>
+</body>
+</html>
