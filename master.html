@@ -1,1 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мастер - Мои задачи</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0B192C; color: #E2E8F0; display: flex; height: 100vh; }
+        .sidebar { width: 320px; background: #1A2C42; padding: 20px; border-right: 1px solid #3A506B; overflow-y: auto; }
+        .main { flex: 1; display: flex; flex-direction: column; padding: 20px; }
+        .stage-card { background: #0B192C; padding: 12px; margin-bottom: 12px; border-radius: 8px; cursor: pointer; border-left: 4px solid #3A506B; }
+        .stage-card.active { border-left-color: #FFC107; background: #112035; }
+        .chat-area { background: #112035; border-radius: 12px; display: flex; flex-direction: column; height: 100%; padding: 20px; }
+        .msg-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; }
+        .msg { padding: 10px; border-radius: 10px; max-width: 70%; }
+        .msg.me { background: #FFC107; color: #000; align-self: flex-end; }
+        .msg.other { background: #2A3E59; align-self: flex-start; }
+        .msg small { font-size: 11px; opacity: 0.8; }
+        .input-area { display: flex; gap: 10px; }
+        .input-area input { flex: 1; padding: 12px; border-radius: 6px; border: none; background: #0B192C; color: white; }
+        button { padding: 10px 20px; background: #FFC107; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .danger-btn { background: #DC3545; color: white; margin-top: 20px; width: 100%; }
+        .status-actions { margin-bottom: 15px; display: flex; gap: 10px; }
+        h3 { color: #FFC107; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <h3>Мои задачи</h3>
+    <div id="stagesList">Загрузка...</div>
+    <button onclick="logout()" class="danger-btn">Выход</button>
+</div>
+<div class="main">
+    <div id="chatContainer" style="display: none; height: 100%;">
+        <div class="chat-area">
+            <h2 id="chatTitle"></h2>
+            <div id="statusActions" class="status-actions"></div>
+            <div class="msg-list" id="msgList"></div>
+            <div class="input-area">
+                <input type="text" id="msgInput" placeholder="Сообщение клиенту...">
+                <button onclick="sendMessage()">Отправить</button>
+            </div>
+        </div>
+    </div>
+    <div id="noTask" style="display: flex; align-items: center; justify-content: center; height: 100%;">Выберите задачу из списка слева</div>
+</div>
 
+<script>
+    const token = localStorage.getItem('token');
+    const userId = localStorage.getItem('user_id');
+    if (!token || localStorage.getItem('role') !== 'master') window.location.href = '/frontend/login.html';
+
+    let currentOrderId = null;
+    let currentStageId = null;
+    let ws = null;
+
+    function connectWebSocket() {
+        if (ws && ws.readyState === WebSocket.OPEN) return;
+        ws = new WebSocket(`ws://${window.location.host}/ws?token=${token}`);
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'chat' && data.data.order_id === currentOrderId) {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `msg ${data.data.sender_id === userId ? 'me' : 'other'}`;
+                msgDiv.innerHTML = `<small>${data.data.sender_name} (${data.data.timestamp.slice(0,19)})</small><br>${data.data.text}`;
+                document.getElementById('msgList').appendChild(msgDiv);
+                msgDiv.scrollIntoView({ behavior: 'smooth' });
+            } else if (data.type === 'status_update' && data.data.order_id === currentOrderId) {
+                alert(`Статус заказа: ${data.data.text}`);
+                loadStages();
+            }
+        };
+        ws.onclose = () => setTimeout(connectWebSocket, 3000);
+    }
+
+    async function loadStages() {
+        try {
+            const resp = await fetch(`/api/my_stages?token=${token}`);
+            const data = await resp.json();
+            const container = document.getElementById('stagesList');
+            if (data.length === 0) { container.innerHTML = '<p>Нет назначенных этапов</p>'; return; }
+            container.innerHTML = data.map(item => `
+                <div class="stage-card" onclick="selectStage('${item.order.id}', '${item.stage.id}', '${item.stage.name}', '${item.stage.status}')">
+                    <b>${item.stage.name}</b><br>
+                    Заказ: ${item.order.car_model} (${item.order.car_plate})<br>
+                    Статус: ${item.stage.status}
+                </div>
+            `).join('');
+        } catch(e) { console.error(e); document.getElementById('stagesList').innerHTML = '<p>Ошибка загрузки</p>'; }
+    }
+
+    async function selectStage(orderId, stageId, stageName, status) {
+        currentOrderId = orderId;
+        currentStageId = stageId;
+        document.getElementById('chatContainer').style.display = 'flex';
+        document.getElementById('noTask').style.display = 'none';
+        document.getElementById('chatTitle').innerText = `Этап: ${stageName}`;
+
+        const actionsDiv = document.getElementById('statusActions');
+        if (status === 'pending') actionsDiv.innerHTML = `<button onclick="updateStage('start')">Начать работу</button>`;
+        else if (status === 'in_progress') actionsDiv.innerHTML = `<button onclick="updateStage('complete')" style="background:#28a745;">Завершить этап</button>`;
+        else actionsDiv.innerHTML = '';
+
+        await loadMessages();
+        connectWebSocket();
+    }
+
+    async function loadMessages() {
+        try {
+            const resp = await fetch(`/api/orders/${currentOrderId}/messages?token=${token}`);
+            const msgs = await resp.json();
+            const msgList = document.getElementById('msgList');
+            msgList.innerHTML = msgs.map(m => `
+                <div class="msg ${m.sender_id === userId ? 'me' : 'other'}">
+                    <small>${m.sender_name} (${m.timestamp.slice(0,19)})</small><br>${m.text}
+                </div>
+            `).join('');
+            msgList.scrollTop = msgList.scrollHeight;
+        } catch(e) { console.error('Ошибка загрузки сообщений', e); }
+    }
+
+    async function updateStage(action) {
+        try {
+            const url = `/api/stages/${currentStageId}/${action}`;
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            alert(`Этап ${action === 'start' ? 'начат' : 'завершён'}`);
+            await loadStages();
+            const resp = await fetch(`/api/orders/${currentOrderId}/stages?token=${token}`);
+            const stages = await resp.json();
+            const current = stages.find(s => s.id === currentStageId);
+            if (current) selectStage(currentOrderId, currentStageId, current.name, current.status);
+        } catch(e) { alert('Ошибка: ' + e.message); }
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('msgInput');
+        const text = input.value.trim();
+        if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: 'chat', order_id: currentOrderId, text: text }));
+        input.value = '';
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/frontend/login.html'; }
+
+    window.onload = loadStages;
+</script>
+</body>
+</html>
