@@ -34,17 +34,6 @@ pip install fastapi uvicorn sqlalchemy pydantic python-jose[cryptography]
 python app.py
 Сервер будет доступен по адресу: http://localhost:8000
 
-## Структура проекта
-KR_KS/
-├── app.py # Запуск сервера
-├── main.py # Основная логика (API, WebSocket)
-├── frontend/
-│ ├── login.html # Страница входа
-│ ├── admin.html # Панель администратора
-│ ├── master.html # Панель мастера
-│ └── client.html # Личный кабинет клиента
-└── car_service.db # База данных (создаётся автоматически)
-
 ## Сетевые протоколы
 HTTP/1.1 — REST API запросы
 WebSocket — Чат и уведомления в реальном времени
