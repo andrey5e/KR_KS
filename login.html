@@ -1,1 +1,50 @@
-
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0B192C; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .login-card { background: #1A2C42; padding: 40px; border-radius: 16px; width: 350px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); text-align: center; }
+        h1 { color: #FFC107; margin-bottom: 30px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #0B192C; color: white; border: 1px solid #3A506B; border-radius: 6px; }
+        button { width: 100%; padding: 12px; background: #FFC107; color: #0B192C; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #E0A800; }
+        .error { color: #FF6B6B; margin-top: 10px; }
+    </style>
+</head>
+<body>
+<div class="login-card">
+    <h1>Тюнинг-ателье</h1>
+    <input type="text" id="username" placeholder="Логин">
+    <input type="password" id="password" placeholder="Пароль">
+    <button onclick="login()">Войти</button>
+    <div id="errorMsg" class="error"></div>
+</div>
+<script>
+    async function login() {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        try {
+            const resp = await fetch('/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            const data = await resp.json();
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user_id', data.user_id);
+            localStorage.setItem('role', data.role);
+            localStorage.setItem('full_name', data.full_name);
+            if (data.role === 'admin') window.location.href = '/frontend/admin.html';
+            else if (data.role === 'client') window.location.href = '/frontend/client.html';
+            else if (data.role === 'master') window.location.href = '/frontend/master.html';
+        } catch (err) {
+            document.getElementById('errorMsg').innerText = 'Ошибка: ' + err.message;
+        }
+    }
+</script>
+</body>
+</html>
